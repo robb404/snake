@@ -43,7 +43,8 @@ function spawn(cell, count, colors, speed) {
 }
 
 // White noise through a low-pass filter: short and bright for a gunshot, long and dark for an explosion.
-function bang(duration, cutoff, volume) {
+function bang(duration, cutoff, volume, delay = 0) {
+  const start = audio.currentTime + delay;
   const buffer = audio.createBuffer(1, audio.sampleRate * duration, audio.sampleRate);
   const data = buffer.getChannelData(0);
   for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
@@ -52,10 +53,48 @@ function bang(duration, cutoff, volume) {
   const gain = audio.createGain();
   src.buffer = buffer;
   filter.frequency.value = cutoff;
-  gain.gain.setValueAtTime(volume, audio.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + duration);
+  gain.gain.setValueAtTime(volume, start);
+  gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
   src.connect(filter).connect(gain).connect(audio.destination);
-  src.start();
+  src.start(start);
+}
+
+// Pistol shot in an office tower: sharp crack, low body thump, then two echoes off the walls.
+function pistol() {
+  bang(0.05, 8000, 1);
+  const now = audio.currentTime;
+  const osc = audio.createOscillator();
+  const gain = audio.createGain();
+  osc.frequency.setValueAtTime(160, now);
+  osc.frequency.exponentialRampToValueAtTime(45, now + 0.15);
+  gain.gain.setValueAtTime(0.7, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+  osc.connect(gain).connect(audio.destination);
+  osc.start(now);
+  osc.stop(now + 0.15);
+  bang(0.2, 2000, 0.3, 0.09);
+  bang(0.3, 1000, 0.15, 0.2);
+}
+
+// Opening phrase of Beethoven's Ode to Joy (public domain), the film's recurring theme: [Hz, beats].
+const ODE_TO_JOY = [[330, 1], [330, 1], [349, 1], [392, 1], [392, 1], [349, 1], [330, 1], [294, 1],
+  [262, 1], [262, 1], [294, 1], [330, 1], [330, 1.5], [294, 0.5], [294, 2]];
+
+function playOdeToJoy() {
+  let time = audio.currentTime;
+  ODE_TO_JOY.forEach(([freq, beats]) => {
+    const len = beats * 0.2;
+    const osc = audio.createOscillator();
+    const gain = audio.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.15, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + len);
+    osc.connect(gain).connect(audio.destination);
+    osc.start(time);
+    osc.stop(time + len);
+    time += len;
+  });
 }
 
 function placeFood() {
@@ -97,7 +136,7 @@ function tick() {
   if (head.x === food.x && head.y === food.y) {
     score++;
     scoreEl.textContent = 'Terrorists stopped: ' + score;
-    bang(0.15, 4000, 0.5);
+    pistol();
     spawn(food, 16, ['#fff3b0', '#ffd24a'], 3);
     flash = 1;
     placeFood();
@@ -262,6 +301,7 @@ document.addEventListener('keydown', e => {
   if (turning) dir = d;
   // Move right away instead of waiting for the next tick, then restart the beat from now.
   if (!started || turning) {
+    if (!started) playOdeToJoy();
     started = true;
     clearInterval(timer);
     tick();
