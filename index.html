@@ -80,6 +80,21 @@ function pistol() {
 const ODE_TO_JOY = [[330, 1], [330, 1], [349, 1], [392, 1], [392, 1], [349, 1], [330, 1], [294, 1],
   [262, 1], [262, 1], [294, 1], [330, 1], [330, 1.5], [294, 0.5], [294, 2]];
 
+// Falling whistle for Hans: pitch slides down as he drops, fading in and out.
+function whistle() {
+  const now = audio.currentTime;
+  const osc = audio.createOscillator();
+  const gain = audio.createGain();
+  osc.frequency.setValueAtTime(1400, now);
+  osc.frequency.exponentialRampToValueAtTime(250, now + 4);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.06, now + 0.5);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 4);
+  osc.connect(gain).connect(audio.destination);
+  osc.start(now);
+  osc.stop(now + 4);
+}
+
 function playOdeToJoy() {
   let time = audio.currentTime;
   ODE_TO_JOY.forEach(([freq, beats]) => {
@@ -313,6 +328,7 @@ document.addEventListener('keydown', e => {
 const sky = document.getElementById('sky');
 const sctx = sky.getContext('2d');
 let buildings, tower, flakes;
+let hans = null, nextHans = 8000; // the falling figure, and when (in ms since page load) he next drops
 
 function makeBuilding(x, w, h, color, litChance) {
   const top = sky.height - h, windows = [];
@@ -363,6 +379,53 @@ function drawScenery(now) {
   sctx.shadowBlur = 20 + 10 * Math.sin(now / 90);
   sctx.fillRect(tower.x + 4, tower.top + 52, tower.w - 8, 10);
   sctx.shadowBlur = 0;
+
+  // Now and then, Hans Gruber falls in slow motion from the burning floor
+  if (!hans && now > nextHans) {
+    hans = { x: tower.x + tower.w / 2, y: tower.top + 57, vx: (Math.random() - 0.5) * 0.4, vy: 0, angle: 0 };
+    if (audio) whistle();
+  }
+  if (hans) {
+    hans.vy = Math.min(hans.vy + 0.015, 1.6);
+    hans.x += hans.vx;
+    hans.y += hans.vy;
+    hans.angle += 0.012;
+    const flail = Math.sin(now / 120);
+    sctx.save();
+    sctx.translate(hans.x, hans.y);
+    sctx.rotate(hans.angle);
+    sctx.scale(1.5, 1.5);
+    sctx.shadowColor = '#ff6a1a'; // lit from above by the fire
+    sctx.shadowBlur = 8;
+    // Flailing arms and legs
+    sctx.strokeStyle = '#3a3a44';
+    sctx.lineWidth = 3;
+    sctx.lineCap = 'round';
+    sctx.beginPath();
+    sctx.moveTo(0, -4);
+    sctx.lineTo(-9, -10 + flail * 5);
+    sctx.moveTo(0, -4);
+    sctx.lineTo(9, -10 - flail * 5);
+    sctx.moveTo(0, 5);
+    sctx.lineTo(-4, 15 + flail * 3);
+    sctx.moveTo(0, 5);
+    sctx.lineTo(4, 15 - flail * 3);
+    sctx.stroke();
+    // Dark suit, white shirt, head
+    sctx.fillStyle = '#3a3a44';
+    sctx.fillRect(-4, -6, 8, 12);
+    sctx.fillStyle = '#eee';
+    sctx.fillRect(-1, -6, 2, 7);
+    sctx.fillStyle = '#d9a066';
+    sctx.beginPath();
+    sctx.arc(0, -10, 3.5, 0, Math.PI * 2);
+    sctx.fill();
+    sctx.restore();
+    if (hans.y > sky.height + 30) {
+      hans = null;
+      nextHans = now + 15000 + Math.random() * 25000;
+    }
+  }
 
   sctx.fillStyle = '#fff';
   flakes.forEach(f => {
