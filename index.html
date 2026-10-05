@@ -8,8 +8,6 @@
   h1 { margin: 0; font-family: Impact, 'Arial Narrow Bold', sans-serif; font-size: 48px; letter-spacing: 4px; color: #f0f0f0; text-shadow: 0 0 12px #ff3b1f, 3px 3px 0 #8a0000; }
   .sub { margin: 4px 0 14px; color: #c9a227; letter-spacing: 3px; text-transform: uppercase; font-size: 13px; }
   #score { font-family: Impact, sans-serif; font-size: 22px; letter-spacing: 1px; margin-bottom: 10px; color: #ffd24a; }
-  /* A strand of Christmas lights around the board */
-  .lights { padding: 8px; background: repeating-linear-gradient(90deg, #ff2b2b 0 14px, #1fd65f 14px 28px, #ffd24a 28px 42px, #3aa0ff 42px 56px); box-shadow: 0 0 24px #ff2b2b66; }
   canvas { display: block; }
 </style>
 </head>
@@ -17,9 +15,11 @@
 <h1>NAKATOMI PLAZA</h1>
 <div class="sub">Christmas Eve · 30th Floor · Air Ducts</div>
 <div id="score">Terrorists stopped: 0</div>
-<div class="lights"><canvas id="game" width="400" height="400"></canvas></div>
+<canvas id="game" width="440" height="440"></canvas>
 <script>
 const GRID = 20, CELL = 20;
+const PAD = 20; // room around the board for the Christmas lights
+const LIGHT_COLORS = ['#ff2b2b', '#1fd65f', '#ffd24a', '#3aa0ff'];
 const ctx = document.getElementById('game').getContext('2d');
 const scoreEl = document.getElementById('score');
 
@@ -91,6 +91,27 @@ function tick() {
 }
 
 function draw() {
+  ctx.fillStyle = '#0b0e15';
+  ctx.fillRect(0, 0, 440, 440);
+
+  // Christmas lights strung around the board
+  ctx.strokeStyle = '#1d4a2a';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(10, 10, 420, 420);
+  for (let p = 10; p < 430; p += 20) {
+    [[p, 10], [430, p], [440 - p, 430], [10, 440 - p]].forEach(([x, y], side) => {
+      ctx.fillStyle = ctx.shadowColor = LIGHT_COLORS[((p - 10) / 20 + side) % LIGHT_COLORS.length];
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+  ctx.shadowBlur = 0;
+
+  ctx.save();
+  ctx.translate(PAD, PAD);
+
   // Office carpet tiles
   for (let x = 0; x < GRID; x++) {
     for (let y = 0; y < GRID; y++) {
@@ -99,39 +120,66 @@ function draw() {
     }
   }
 
-  // Detonator: black box, wires, blinking red light
+  // Detonator: black box, wires, glowing red light
   const fx = food.x * CELL, fy = food.y * CELL;
   ctx.fillStyle = '#2b2b2b';
   ctx.fillRect(fx + 3, fy + 6, 14, 11);
+  ctx.fillStyle = '#454545';
+  ctx.fillRect(fx + 3, fy + 6, 14, 2);
   ctx.fillStyle = '#c9a227';
-  ctx.fillRect(fx + 5, fy + 3, 2, 4);
+  ctx.fillRect(fx + 5, fy + 2, 2, 5);
   ctx.fillStyle = '#3aa0ff';
-  ctx.fillRect(fx + 13, fy + 3, 2, 4);
-  ctx.fillStyle = Date.now() % 500 < 250 ? '#ff2b2b' : '#600';
-  ctx.fillRect(fx + 8, fy + 9, 4, 4);
+  ctx.fillRect(fx + 13, fy + 2, 2, 5);
+  const lit = Date.now() % 500 < 250;
+  ctx.fillStyle = ctx.shadowColor = lit ? '#ff2b2b' : '#600';
+  ctx.shadowBlur = lit ? 14 : 0;
+  ctx.beginPath();
+  ctx.arc(fx + 10, fy + 12, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
 
-  // Air duct segments behind McClane
-  snake.slice(1).forEach(s => {
-    const x = s.x * CELL, y = s.y * CELL;
-    ctx.fillStyle = '#8d96a3';
-    ctx.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
-    ctx.fillStyle = '#5c6470';
-    ctx.fillRect(x + 4, y + 4, CELL - 8, CELL - 8);
-    ctx.fillStyle = '#c3cad3';
-    [[3, 3], [15, 3], [3, 15], [15, 15]].forEach(([rx, ry]) => ctx.fillRect(x + rx, y + ry, 2, 2));
+  // Air duct: one continuous pipe (dark edge, body, highlight) through the snake
+  const centers = snake.map(s => [s.x * CELL + 10, s.y * CELL + 10]);
+  ctx.lineCap = ctx.lineJoin = 'round';
+  [[16, '#4e5560'], [12, '#8d96a3'], [3, '#c9d0d8']].forEach(([width, color]) => {
+    ctx.lineWidth = width;
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    centers.forEach(([x, y]) => ctx.lineTo(x, y));
+    ctx.stroke();
   });
+  // Seams where duct sections join
+  ctx.strokeStyle = '#3a4048';
+  ctx.lineWidth = 2;
+  for (let i = 1; i < centers.length; i++) {
+    const [ax, ay] = centers[i - 1], [bx, by] = centers[i];
+    const x = (ax + bx) / 2, y = (ay + by) / 2;
+    // The seam runs across the pipe: horizontal on a vertical run, vertical on a horizontal one
+    const [dx, dy] = ax === bx ? [8, 0] : [0, 8];
+    ctx.beginPath();
+    ctx.moveTo(x - dx, y - dy);
+    ctx.lineTo(x + dx, y + dy);
+    ctx.stroke();
+  }
 
-  // McClane: face, hair, white tank top
-  const hx = snake[0].x * CELL, hy = snake[0].y * CELL;
-  ctx.fillStyle = '#f2f2f2';
-  ctx.fillRect(hx + 2, hy + 13, 16, 6);
+  // McClane from above, facing the way he's crawling: tank top, arms reaching forward, head
+  ctx.save();
+  ctx.translate(centers[0][0], centers[0][1]);
+  ctx.rotate(Math.atan2(dir[1], dir[0]));
   ctx.fillStyle = '#d9a066';
-  ctx.fillRect(hx + 4, hy + 3, 12, 11);
+  ctx.fillRect(-3, -9, 11, 3);
+  ctx.fillRect(-3, 6, 11, 3);
+  ctx.fillStyle = '#f2f2f2';
+  ctx.fillRect(-10, -7, 9, 14);
+  ctx.fillStyle = '#d9a066';
+  ctx.beginPath();
+  ctx.arc(3, 0, 5, 0, Math.PI * 2);
+  ctx.fill();
   ctx.fillStyle = '#4a2f1a';
-  ctx.fillRect(hx + 4, hy + 1, 12, 4);
-  ctx.fillStyle = '#111';
-  ctx.fillRect(hx + 6, hy + 7, 2, 2);
-  ctx.fillRect(hx + 12, hy + 7, 2, 2);
+  ctx.beginPath();
+  ctx.arc(3, 0, 5, Math.PI / 2, Math.PI * 1.5);
+  ctx.fill();
+  ctx.restore();
 
   ctx.textAlign = 'center';
   if (over) {
@@ -148,6 +196,7 @@ function draw() {
     ctx.font = '18px system-ui, sans-serif';
     ctx.fillText('Arrow keys or WASD to start crawling', 200, 160);
   }
+  ctx.restore();
 }
 
 document.addEventListener('keydown', e => {
