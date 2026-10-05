@@ -2,16 +2,22 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Snake</title>
+<title>Nakatomi Snake</title>
 <style>
-  body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #111; color: #eee; font-family: system-ui, sans-serif; }
-  #score { font-size: 24px; margin-bottom: 12px; }
-  canvas { border: 2px solid #444; }
+  body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(ellipse at top, #1d2a44, #05070d 70%); color: #eee; font-family: system-ui, sans-serif; }
+  h1 { margin: 0; font-family: Impact, 'Arial Narrow Bold', sans-serif; font-size: 48px; letter-spacing: 4px; color: #f0f0f0; text-shadow: 0 0 12px #ff3b1f, 3px 3px 0 #8a0000; }
+  .sub { margin: 4px 0 14px; color: #c9a227; letter-spacing: 3px; text-transform: uppercase; font-size: 13px; }
+  #score { font-family: Impact, sans-serif; font-size: 22px; letter-spacing: 1px; margin-bottom: 10px; color: #ffd24a; }
+  /* A strand of Christmas lights around the board */
+  .lights { padding: 8px; background: repeating-linear-gradient(90deg, #ff2b2b 0 14px, #1fd65f 14px 28px, #ffd24a 28px 42px, #3aa0ff 42px 56px); box-shadow: 0 0 24px #ff2b2b66; }
+  canvas { display: block; }
 </style>
 </head>
 <body>
-<div id="score">Score: 0</div>
-<canvas id="game" width="400" height="400"></canvas>
+<h1>NAKATOMI PLAZA</h1>
+<div class="sub">Christmas Eve · 30th Floor · Air Ducts</div>
+<div id="score">Terrorists stopped: 0</div>
+<div class="lights"><canvas id="game" width="400" height="400"></canvas></div>
 <script>
 const GRID = 20, CELL = 20;
 const ctx = document.getElementById('game').getContext('2d');
@@ -26,15 +32,20 @@ const KEYS = {
 
 let snake, dir, nextDir, food, score, over, started, timer, audio;
 
-function beep(freq, duration) {
-  const osc = audio.createOscillator();
+// White noise through a low-pass filter: short and bright for a gunshot, long and dark for an explosion.
+function bang(duration, cutoff, volume) {
+  const buffer = audio.createBuffer(1, audio.sampleRate * duration, audio.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  const src = audio.createBufferSource();
+  const filter = audio.createBiquadFilter();
   const gain = audio.createGain();
-  osc.frequency.value = freq;
-  gain.gain.setValueAtTime(0.2, audio.currentTime);
+  src.buffer = buffer;
+  filter.frequency.value = cutoff;
+  gain.gain.setValueAtTime(volume, audio.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + duration);
-  osc.connect(gain).connect(audio.destination);
-  osc.start();
-  osc.stop(audio.currentTime + duration);
+  src.connect(filter).connect(gain).connect(audio.destination);
+  src.start();
 }
 
 function placeFood() {
@@ -49,7 +60,7 @@ function reset() {
   score = 0;
   over = false;
   started = false;
-  scoreEl.textContent = 'Score: 0';
+  scoreEl.textContent = 'Terrorists stopped: 0';
   placeFood();
   draw();
 }
@@ -63,15 +74,15 @@ function tick() {
   if (hitWall || hitSelf) {
     over = true;
     clearInterval(timer);
-    beep(110, 0.6);
+    bang(1.5, 300, 0.8);
     draw();
     return;
   }
   snake.unshift(head);
   if (head.x === food.x && head.y === food.y) {
     score++;
-    scoreEl.textContent = 'Score: ' + score;
-    beep(880, 0.1);
+    scoreEl.textContent = 'Terrorists stopped: ' + score;
+    bang(0.15, 4000, 0.5);
     placeFood();
   } else {
     snake.pop();
@@ -80,21 +91,62 @@ function tick() {
 }
 
 function draw() {
-  ctx.fillStyle = '#1b1b1b';
-  ctx.fillRect(0, 0, 400, 400);
-  ctx.fillStyle = '#e74c3c';
-  ctx.fillRect(food.x * CELL + 1, food.y * CELL + 1, CELL - 2, CELL - 2);
-  snake.forEach((s, i) => {
-    ctx.fillStyle = i === 0 ? '#7dff7a' : '#2ecc71';
-    ctx.fillRect(s.x * CELL + 1, s.y * CELL + 1, CELL - 2, CELL - 2);
+  // Office carpet tiles
+  for (let x = 0; x < GRID; x++) {
+    for (let y = 0; y < GRID; y++) {
+      ctx.fillStyle = (x + y) % 2 ? '#1a1f2b' : '#161a24';
+      ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+    }
+  }
+
+  // Detonator: black box, wires, blinking red light
+  const fx = food.x * CELL, fy = food.y * CELL;
+  ctx.fillStyle = '#2b2b2b';
+  ctx.fillRect(fx + 3, fy + 6, 14, 11);
+  ctx.fillStyle = '#c9a227';
+  ctx.fillRect(fx + 5, fy + 3, 2, 4);
+  ctx.fillStyle = '#3aa0ff';
+  ctx.fillRect(fx + 13, fy + 3, 2, 4);
+  ctx.fillStyle = Date.now() % 500 < 250 ? '#ff2b2b' : '#600';
+  ctx.fillRect(fx + 8, fy + 9, 4, 4);
+
+  // Air duct segments behind McClane
+  snake.slice(1).forEach(s => {
+    const x = s.x * CELL, y = s.y * CELL;
+    ctx.fillStyle = '#8d96a3';
+    ctx.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
+    ctx.fillStyle = '#5c6470';
+    ctx.fillRect(x + 4, y + 4, CELL - 8, CELL - 8);
+    ctx.fillStyle = '#c3cad3';
+    [[3, 3], [15, 3], [3, 15], [15, 15]].forEach(([rx, ry]) => ctx.fillRect(x + rx, y + ry, 2, 2));
   });
-  ctx.fillStyle = '#eee';
+
+  // McClane: face, hair, white tank top
+  const hx = snake[0].x * CELL, hy = snake[0].y * CELL;
+  ctx.fillStyle = '#f2f2f2';
+  ctx.fillRect(hx + 2, hy + 13, 16, 6);
+  ctx.fillStyle = '#d9a066';
+  ctx.fillRect(hx + 4, hy + 3, 12, 11);
+  ctx.fillStyle = '#4a2f1a';
+  ctx.fillRect(hx + 4, hy + 1, 12, 4);
+  ctx.fillStyle = '#111';
+  ctx.fillRect(hx + 6, hy + 7, 2, 2);
+  ctx.fillRect(hx + 12, hy + 7, 2, 2);
+
   ctx.textAlign = 'center';
-  ctx.font = '20px system-ui, sans-serif';
   if (over) {
-    ctx.fillText('Game over — press Space or Enter', 200, 200);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(0, 140, 400, 110);
+    ctx.fillStyle = '#ff3b1f';
+    ctx.font = '40px Impact, sans-serif';
+    ctx.fillText('YIPPEE-KI-YAY', 200, 192);
+    ctx.fillStyle = '#eee';
+    ctx.font = '16px system-ui, sans-serif';
+    ctx.fillText('Press Space or Enter to try again', 200, 228);
   } else if (!started) {
-    ctx.fillText('Press an arrow key or WASD to start', 200, 160);
+    ctx.fillStyle = '#eee';
+    ctx.font = '18px system-ui, sans-serif';
+    ctx.fillText('Arrow keys or WASD to start crawling', 200, 160);
   }
 }
 
