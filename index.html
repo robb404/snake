@@ -9,9 +9,11 @@
   .sub { margin: 4px 0 14px; color: #c9a227; letter-spacing: 3px; text-transform: uppercase; font-size: 13px; }
   #score { font-family: Impact, sans-serif; font-size: 22px; letter-spacing: 1px; margin-bottom: 10px; color: #ffd24a; }
   canvas { display: block; }
+  #sky { position: fixed; inset: 0; z-index: -1; }
 </style>
 </head>
 <body>
+<canvas id="sky"></canvas>
 <h1>NAKATOMI PLAZA</h1>
 <div class="sub">Christmas Eve · 30th Floor · Air Ducts</div>
 <div id="score">Terrorists stopped: 0</div>
@@ -264,11 +266,77 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// Background: night LA skyline, the tower with a fire on one floor, and falling snow
+const sky = document.getElementById('sky');
+const sctx = sky.getContext('2d');
+let buildings, tower, flakes;
+
+function makeBuilding(x, w, h, color, litChance) {
+  const top = sky.height - h, windows = [];
+  for (let wy = top + 10; wy < sky.height - 10; wy += 14) {
+    for (let wx = x + 6; wx < x + w - 8; wx += 11) {
+      if (Math.random() < litChance) windows.push([wx, wy]);
+    }
+  }
+  return { x, top, w, h, color, windows };
+}
+
+function buildScenery() {
+  sky.width = innerWidth;
+  sky.height = innerHeight;
+  buildings = [];
+  for (let x = -10; x < sky.width; ) {
+    const w = 40 + Math.random() * 60;
+    buildings.push(makeBuilding(x, w, 80 + Math.random() * sky.height * 0.35, '#0d1322', 0.2));
+    x += w + 3;
+  }
+  tower = makeBuilding(sky.width * 0.82 - 60, 120, sky.height * 0.8, '#151c2e', 0.45);
+  buildings.push(tower);
+  flakes = Array.from({ length: 150 }, () => ({ x: Math.random() * sky.width, y: Math.random() * sky.height, r: 1 + Math.random() * 2, v: 0.4 + Math.random() }));
+}
+
+function drawScenery(now) {
+  const gradient = sctx.createLinearGradient(0, 0, 0, sky.height);
+  gradient.addColorStop(0, '#05070d');
+  gradient.addColorStop(1, '#1d2a44');
+  sctx.fillStyle = gradient;
+  sctx.fillRect(0, 0, sky.width, sky.height);
+
+  buildings.forEach(b => {
+    sctx.fillStyle = b.color;
+    sctx.fillRect(b.x, b.top, b.w, b.h);
+    sctx.fillStyle = '#e8c870';
+    b.windows.forEach(([x, y]) => sctx.fillRect(x, y, 5, 7));
+  });
+
+  // Antenna on the tower, and a flickering fire a few floors from the top
+  sctx.fillStyle = '#151c2e';
+  sctx.fillRect(tower.x + 58, tower.top - 30, 4, 30);
+  sctx.fillStyle = sctx.shadowColor = '#ff6a1a';
+  sctx.shadowBlur = 20 + 10 * Math.sin(now / 90);
+  sctx.fillRect(tower.x + 4, tower.top + 52, tower.w - 8, 10);
+  sctx.shadowBlur = 0;
+
+  sctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+  flakes.forEach(f => {
+    f.y += f.v;
+    f.x += Math.sin(f.y / 40) * 0.3;
+    if (f.y > sky.height) f.y = -5;
+    sctx.beginPath();
+    sctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+    sctx.fill();
+  });
+}
+
+addEventListener('resize', buildScenery);
+
 function frame(now) {
+  drawScenery(now);
   draw(now);
   requestAnimationFrame(frame);
 }
 
+buildScenery();
 reset();
 requestAnimationFrame(frame);
 </script>
