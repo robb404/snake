@@ -335,7 +335,11 @@ function buildScenery() {
   }
   tower = makeBuilding(sky.width * 0.82 - 60, 120, sky.height * 0.8, '#151c2e', 0.45);
   buildings.push(tower);
-  flakes = Array.from({ length: 150 }, () => ({ x: Math.random() * sky.width, y: Math.random() * sky.height, r: 1 + Math.random() * 2, v: 0.4 + Math.random() }));
+  // Enough flakes to fill any window; z is depth, so near flakes are bigger, brighter and faster.
+  flakes = Array.from({ length: Math.round(sky.width * sky.height / 3000) }, () => {
+    const z = 0.2 + Math.random() * 0.8;
+    return { x: Math.random() * sky.width, y: Math.random() * sky.height, r: 1 + z * 3, v: 0.3 + z * 1.5, alpha: 0.3 + z * 0.6 };
+  });
 }
 
 function drawScenery(now) {
@@ -360,15 +364,17 @@ function drawScenery(now) {
   sctx.fillRect(tower.x + 4, tower.top + 52, tower.w - 8, 10);
   sctx.shadowBlur = 0;
 
-  sctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+  sctx.fillStyle = '#fff';
   flakes.forEach(f => {
     f.y += f.v;
-    f.x += Math.sin(f.y / 40) * 0.3;
+    f.x += Math.sin(f.y / 40) * f.v * 0.4;
     if (f.y > sky.height) f.y = -5;
+    sctx.globalAlpha = f.alpha;
     sctx.beginPath();
     sctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
     sctx.fill();
   });
+  sctx.globalAlpha = 1;
 }
 
 addEventListener('resize', buildScenery);
