@@ -3,6 +3,7 @@ name: Publish to GitHub Pages
 on:
   push:
     branches: [main]
+  workflow_dispatch: # "Run workflow" button on the Actions tab, to republish after pushing the 3d branch
 
 permissions:
   contents: read
@@ -17,6 +18,11 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      # The 3D version lives on the 3d branch and is published at /3d/
+      - uses: actions/checkout@v4
+        with:
+          ref: 3d
+          path: 3d
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .
