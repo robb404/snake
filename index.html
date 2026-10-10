@@ -35,7 +35,7 @@ const KEYS = {
   arrowright: [1, 0], d: [1, 0],
 };
 
-let snake, dir, food, score, over, started, timer, audio;
+let pos, dir, food, score, over, started, timer, audio;
 let prev, lastTick; // animation state
 
 // White noise through a low-pass filter: short and bright for a gunshot, long and dark for an explosion.
@@ -111,11 +111,11 @@ function playOdeToJoy() {
 function placeFood() {
   do {
     food = { x: Math.floor(Math.random() * GRID), y: Math.floor(Math.random() * GRID) };
-  } while (snake.some(s => s.x === food.x && s.y === food.y));
+  } while (food.x === pos.x && food.y === pos.y);
 }
 
 function reset() {
-  snake = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
+  pos = { x: 10, y: 10 };
   dir = [1, 0];
   score = 0;
   over = false;
@@ -123,32 +123,27 @@ function reset() {
   scoreEl.textContent = 'Terrorists stopped: 0';
   msgEl.textContent = 'Arrow keys or WASD to start crawling';
   placeFood();
-  prev = snake;
+  prev = pos;
   lastTick = performance.now();
 }
 
 function tick() {
-  prev = snake.slice();
+  prev = pos;
   lastTick = performance.now();
-  const head = { x: snake[0].x + dir[0], y: snake[0].y + dir[1] };
-  const hitWall = head.x < 0 || head.y < 0 || head.x >= GRID || head.y >= GRID;
-  // The tail moves out of the way this tick, so it isn't a collision.
-  const hitSelf = snake.slice(0, -1).some(s => s.x === head.x && s.y === head.y);
-  if (hitWall || hitSelf) {
+  const next = { x: pos.x + dir[0], y: pos.y + dir[1] };
+  if (next.x < 0 || next.y < 0 || next.x >= GRID || next.y >= GRID) {
     over = true;
     clearInterval(timer);
     bang(1.5, 300, 0.8);
     msgEl.innerHTML = '<b>YIPPEE-KI-YAY</b>Press Space or Enter to try again';
     return;
   }
-  snake.unshift(head);
-  if (head.x === food.x && head.y === food.y) {
+  pos = next;
+  if (pos.x === food.x && pos.y === food.y) {
     score++;
     scoreEl.textContent = 'Terrorists stopped: ' + score;
     pistol();
     placeFood();
-  } else {
-    snake.pop();
   }
 }
 
@@ -218,28 +213,44 @@ bulb.position.y = 0.55;
 detonator.add(bulb);
 scene.add(detonator);
 
-// One block per snake cell: McClane's head first, then air duct
-const headGeo = new THREE.BoxGeometry(0.85, 0.8, 0.85);
-const headMat = new THREE.MeshStandardMaterial({ color: 0xd9a066 });
-const ductGeo = new THREE.BoxGeometry(0.8, 0.6, 0.8);
-const ductMat = new THREE.MeshStandardMaterial({ color: 0x8d96a3, metalness: 0.5, roughness: 0.4 });
-const segments = [];
+// McClane as a blocky toy figure, built facing +z (toward the camera) with his feet at y = 0
+const skin = 0xd9a066;
+const mcclane = new THREE.Group();
+function part(parent, w, h, d, color, x, y, z) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color }));
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  parent.add(m);
+}
+// Arms and legs hang from a pivot at the shoulder or hip, so they can swing
+function limb(x, y) {
+  const pivot = new THREE.Group();
+  pivot.position.set(x, y, 0);
+  mcclane.add(pivot);
+  return pivot;
+}
+const legs = [limb(-0.12, 0.5), limb(0.12, 0.5)];
+legs.forEach(leg => part(leg, 0.2, 0.5, 0.22, 0x4a4f5a, 0, -0.25, 0)); // grey trousers
+const arms = [limb(-0.33, 0.98), limb(0.33, 0.98)];
+arms.forEach(arm => part(arm, 0.15, 0.46, 0.17, skin, 0, -0.23, 0)); // bare arms
+part(arms[1], 0.08, 0.14, 0.26, 0x111111, 0, -0.46, 0.08); // pistol in his right hand
+part(mcclane, 0.5, 0.5, 0.28, 0xf2f2f2, 0, 0.75, 0); // white tank top
+part(mcclane, 0.34, 0.34, 0.32, skin, 0, 1.17, 0); // head
+part(mcclane, 0.36, 0.1, 0.34, 0x4a2f1a, 0, 1.37, 0); // short brown hair
+part(mcclane, 0.36, 0.2, 0.06, 0x4a2f1a, 0, 1.25, -0.17); // back of the hair
+[-0.08, 0.08].forEach(x => part(mcclane, 0.05, 0.05, 0.02, 0x222222, x, 1.2, 0.165)); // eyes
+mcclane.scale.setScalar(1.6); // a bit bigger than one square, so he reads at this distance
+scene.add(mcclane);
 
 function draw(now) {
-  while (segments.length < snake.length) {
-    // The first block made is the head; blocks are only ever added and removed at the tail
-    const m = segments.length ? new THREE.Mesh(ductGeo, ductMat) : new THREE.Mesh(headGeo, headMat);
-    m.castShadow = true;
-    segments.push(m);
-    scene.add(m);
-  }
-  while (segments.length > snake.length) scene.remove(segments.pop());
-  // Between ticks, each segment glides from where it was (prev) to where it is now.
+  // Between ticks, McClane glides from where he was (prev) to where he is now,
+  // facing the way he's walking, with arms and legs swinging while he moves.
   const t = Math.min((now - lastTick) / TICK, 1);
-  segments.forEach((m, i) => {
-    m.position.lerpVectors(at(prev[i] || snake[i]), at(snake[i]), t);
-    m.position.y = i ? 0.3 : 0.4;
-  });
+  mcclane.position.lerpVectors(at(prev), at(pos), t);
+  mcclane.rotation.y = Math.atan2(dir[0], dir[1]);
+  const swing = started && !over ? Math.sin(now / 60) * 0.6 : 0;
+  legs[0].rotation.x = arms[1].rotation.x = swing;
+  legs[1].rotation.x = arms[0].rotation.x = -swing;
   detonator.position.copy(at(food));
   bulbMat.emissiveIntensity = now % 500 < 250 ? 2 : 0;
   renderer.render(scene, camera);
@@ -255,8 +266,8 @@ document.addEventListener('keydown', e => {
   const d = KEYS[key];
   if (!d) return;
   e.preventDefault();
-  // A real turn: not the current direction, and not straight back into it.
-  const turning = (d[0] !== dir[0] || d[1] !== dir[1]) && (d[0] !== -dir[0] || d[1] !== -dir[1]);
+  // A real turn: any direction but the current one (with no tail, turning right around is safe).
+  const turning = d[0] !== dir[0] || d[1] !== dir[1];
   if (turning) dir = d;
   // Move right away instead of waiting for the next tick, then restart the beat from now.
   if (!started || turning) {
