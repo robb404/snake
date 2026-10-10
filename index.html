@@ -213,9 +213,14 @@ bulb.position.y = 0.55;
 detonator.add(bulb);
 scene.add(detonator);
 
-// McClane as a blocky toy figure, built facing +z (toward the camera) with his feet at y = 0
+// McClane as a blocky toy figure, built standing in `body` (facing +z, feet at y = 0),
+// then tipped onto his front so he lies along +z with his head leading
 const skin = 0xd9a066;
 const mcclane = new THREE.Group();
+const body = new THREE.Group();
+body.rotation.x = Math.PI / 2;
+body.position.set(0, 0.18, -0.72); // lift him onto the floor and centre him on his square
+mcclane.add(body);
 function part(parent, w, h, d, color, x, y, z) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color }));
   m.position.set(x, y, z);
@@ -226,7 +231,7 @@ function part(parent, w, h, d, color, x, y, z) {
 function limb(x, y) {
   const pivot = new THREE.Group();
   pivot.position.set(x, y, 0);
-  mcclane.add(pivot);
+  body.add(pivot);
   return pivot;
 }
 const legs = [limb(-0.12, 0.5), limb(0.12, 0.5)];
@@ -234,23 +239,26 @@ legs.forEach(leg => part(leg, 0.2, 0.5, 0.22, 0x4a4f5a, 0, -0.25, 0)); // grey t
 const arms = [limb(-0.33, 0.98), limb(0.33, 0.98)];
 arms.forEach(arm => part(arm, 0.15, 0.46, 0.17, skin, 0, -0.23, 0)); // bare arms
 part(arms[1], 0.08, 0.14, 0.26, 0x111111, 0, -0.46, 0.08); // pistol in his right hand
-part(mcclane, 0.5, 0.5, 0.28, 0xf2f2f2, 0, 0.75, 0); // white tank top
-part(mcclane, 0.34, 0.34, 0.32, skin, 0, 1.17, 0); // head
-part(mcclane, 0.36, 0.1, 0.34, 0x4a2f1a, 0, 1.37, 0); // short brown hair
-part(mcclane, 0.36, 0.2, 0.06, 0x4a2f1a, 0, 1.25, -0.17); // back of the hair
-[-0.08, 0.08].forEach(x => part(mcclane, 0.05, 0.05, 0.02, 0x222222, x, 1.2, 0.165)); // eyes
+part(body, 0.5, 0.5, 0.28, 0xf2f2f2, 0, 0.75, 0); // white tank top
+part(body, 0.34, 0.34, 0.32, skin, 0, 1.17, 0); // head
+part(body, 0.36, 0.1, 0.34, 0x4a2f1a, 0, 1.37, 0); // short brown hair
+part(body, 0.36, 0.2, 0.06, 0x4a2f1a, 0, 1.25, -0.17); // back of the hair
+[-0.08, 0.08].forEach(x => part(body, 0.05, 0.05, 0.02, 0x222222, x, 1.2, 0.165)); // eyes
 mcclane.scale.setScalar(1.6); // a bit bigger than one square, so he reads at this distance
 scene.add(mcclane);
 
 function draw(now) {
   // Between ticks, McClane glides from where he was (prev) to where he is now,
-  // facing the way he's walking, with arms and legs swinging while he moves.
+  // facing the way he's crawling. Arms stretch out ahead (rotated half a turn) and lift
+  // to reach forward one at a time, each with the opposite leg kicking behind.
   const t = Math.min((now - lastTick) / TICK, 1);
   mcclane.position.lerpVectors(at(prev), at(pos), t);
   mcclane.rotation.y = Math.atan2(dir[0], dir[1]);
-  const swing = started && !over ? Math.sin(now / 60) * 0.6 : 0;
-  legs[0].rotation.x = arms[1].rotation.x = swing;
-  legs[1].rotation.x = arms[0].rotation.x = -swing;
+  const swing = started && !over ? Math.sin(now / 60) : 0;
+  arms[0].rotation.x = Math.PI - 0.5 * Math.max(swing, 0);
+  arms[1].rotation.x = Math.PI - 0.5 * Math.max(-swing, 0);
+  legs[1].rotation.x = 0.3 * Math.max(swing, 0);
+  legs[0].rotation.x = 0.3 * Math.max(-swing, 0);
   detonator.position.copy(at(food));
   bulbMat.emissiveIntensity = now % 500 < 250 ? 2 : 0;
   renderer.render(scene, camera);
